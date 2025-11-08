@@ -33,15 +33,24 @@ function ScoringPage() {
   const [newBatsmanNeeded, setNewBatsmanNeeded] = useState(false);
   const [pendingExtra, setPendingExtra] = useState(null);
 
+  // CALCULATE THESE FIRST
   const totalBalls = matchSettings.overs * 6;
   const currentOver = Math.floor(ballsCompleted / 6);
   const ballInOver = ballsCompleted % 6;
   const oversDisplay = `${currentOver}.${ballInOver}`;
 
+  // THEN declare the state that uses currentOver
+  const [selectedOverIndex, setSelectedOverIndex] = useState(0); // Use 0 as initial, will update via useEffect
+
   const currentBattingTeam = innings === 1 ? matchSettings.battingFirst : matchSettings.bowlingFirst;
   const currentBowlingTeam = innings === 1 ? matchSettings.bowlingFirst : matchSettings.battingFirst;
 
   const isInningsComplete = wickets >= matchSettings.playersPerTeam - 1 || ballsCompleted >= totalBalls;
+
+  // Add useEffect to sync selectedOverIndex with currentOver
+  useEffect(() => {
+    setSelectedOverIndex(currentOver);
+  }, [currentOver]);
 
   // Load match state from localStorage on component mount
   useEffect(() => {
@@ -119,6 +128,40 @@ function ScoringPage() {
     }
   }, [isLoaded, ballsCompleted, striker, nonStriker, bowler, showBowlerModal]);
 
+  const handleSwipeLeft = () => {
+    if (selectedOverIndex < currentOver) {
+      setSelectedOverIndex(selectedOverIndex + 1);
+    }
+  };
+
+  const handleSwipeRight = () => {
+    if (selectedOverIndex > 0) {
+      setSelectedOverIndex(selectedOverIndex - 1);
+    }
+  };
+
+  const handleSwipe = (e) => {
+    const touch = e.touches[0];
+    const start = { x: touch.clientX, y: touch.clientY };
+
+    const handleTouchEnd = (e) => {
+      const end = { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY };
+      const diff = end.x - start.x;
+
+      if (Math.abs(diff) > 50) {
+        if (diff > 0) {
+          handleSwipeRight(); // Swipe right = previous over
+        } else {
+          handleSwipeLeft(); // Swipe left = next over
+        }
+      }
+      document.removeEventListener('touchend', handleTouchEnd);
+    };
+
+    document.addEventListener('touchend', handleTouchEnd);
+  };
+
+
   const calculateStrikeRate = (runs, balls) => {
     if (balls === 0) return 0;
     return ((runs / balls) * 100).toFixed(2);
@@ -191,13 +234,13 @@ function ScoringPage() {
 
     const ballDetail = {
       ball: ballsCompleted + 1,
-      over: `${currentOver}.${ballInOver}`,
+      over: currentOver,
       runs,
       strikerRuns: runs,
       strikerName: striker,
       bowlerName: bowler
     };
-    setBallHistory([...ballHistory, ballDetail]);
+    setBallHistory(prev => [...prev, ballDetail]); // FIXED
 
     if (runs % 2 === 1) {
       const temp = striker;
@@ -212,7 +255,6 @@ function ScoringPage() {
     }
   };
 
-
   const handleWide = () => {
     if (!bowler) {
       alert('Bowler not set');
@@ -221,6 +263,20 @@ function ScoringPage() {
     const newScore = score + matchSettings.wideRuns;
     setScore(newScore);
     updatePlayerStats(bowler, 'runsConceded', matchSettings.wideRuns);
+
+    const ballDetail = {
+      ball: ballsCompleted,
+      over: currentOver, // Store as NUMBER not string
+      ballInOver: ballInOver,
+      runs: matchSettings.wideRuns,
+      strikerRuns: 0,
+      strikerName: striker,
+      bowlerName: bowler,
+      type: 'wide',
+      isFreeDelivery: true,
+      displayText: 'WD'
+    };
+    setBallHistory(prev => [...prev, ballDetail]);
   };
 
   const handleNoBall = () => {
@@ -231,13 +287,28 @@ function ScoringPage() {
     const newScore = score + matchSettings.noBallRuns;
     setScore(newScore);
     updatePlayerStats(bowler, 'runsConceded', matchSettings.noBallRuns);
+
+    const ballDetail = {
+      ball: ballsCompleted,
+      over: currentOver, // Store as NUMBER not string
+      ballInOver: ballInOver,
+      runs: matchSettings.noBallRuns,
+      strikerRuns: 0,
+      strikerName: striker,
+      bowlerName: bowler,
+      type: 'noball',
+      isFreeDelivery: true,
+      displayText: 'NB'
+    };
+    setBallHistory(prev => [...prev, ballDetail]);
   };
+
+
 
   const handleExtraRunsSelection = (type) => {
     setPendingExtra(type);
     setShowExtraRunsModal(false);
   };
-
 
   const handleRunsWithExtra = (runs) => {
     if (!striker || !bowler) {
@@ -255,7 +326,6 @@ function ScoringPage() {
       updatePlayerStats(striker, 'runs', runs);
       updatePlayerStats(striker, 'ballsFaced', 1);
 
-      // Count Fours and Sixes on extras
       if (runs === 4) {
         setPlayerStats(prev => ({
           ...prev,
@@ -275,19 +345,39 @@ function ScoringPage() {
       }
     }
 
-    const ballDetail = {
+    // FIXED: Create SEPARATE entries for Wide/NoB and Runs
+    // First add the extra ball
+    const extraBallDetail = {
       ball: ballsCompleted,
-      over: `${currentOver}.${ballInOver}`,
-      runs: totalRuns,
-      strikerRuns: runs,
+      over: currentOver,
+      ballInOver: ballInOver,
+      runs: extraRuns,
+      strikerRuns: 0,
       strikerName: striker,
       bowlerName: bowler,
       type: pendingExtra,
       extraRuns: extraRuns,
       isFreeDelivery: true,
-      displayText: pendingExtra === 'wide' ? `WD+${runs}` : `NB+${runs}`
+      displayText: pendingExtra === 'wide' ? 'WD' : 'NB'
     };
-    setBallHistory([...ballHistory, ballDetail]);
+    setBallHistory(prev => [...prev, extraBallDetail]);
+
+    // Then add the runs ball if runs > 0
+    if (runs > 0) {
+      const runsBallDetail = {
+        ball: ballsCompleted + 1,
+        over: currentOver,
+        ballInOver: ballInOver,
+        runs: runs,
+        strikerRuns: runs,
+        strikerName: striker,
+        bowlerName: bowler,
+        isFreeDelivery: false,
+        displayText: runs
+      };
+      setBallHistory(prev => [...prev, runsBallDetail]);
+      setBallsCompleted(ballsCompleted + 1);
+    }
 
     if (runs % 2 === 1) {
       const temp = striker;
@@ -297,6 +387,7 @@ function ScoringPage() {
 
     setPendingExtra(null);
   };
+
 
 
   const handleWicketSubmit = (dismissalMode, details) => {
@@ -327,7 +418,7 @@ function ScoringPage() {
 
     const ballDetail = {
       ball: ballsCompleted + 1,
-      over: `${currentOver}.${ballInOver}`,
+      over: currentOver,
       type: 'wicket',
       dismissalMode,
       details,
@@ -335,7 +426,7 @@ function ScoringPage() {
       bowlerName: bowler,
       runs: extraRunsToAdd
     };
-    setBallHistory([...ballHistory, ballDetail]);
+    setBallHistory(prev => [...prev, ballDetail]); // FIXED
 
     setShowWicketModal(false);
 
@@ -353,7 +444,6 @@ function ScoringPage() {
       }, 1000);
     }
   };
-
 
   const handleNewBatsman = (newBatsman) => {
     setStriker(newBatsman);
@@ -519,16 +609,18 @@ function ScoringPage() {
     }
   };
 
+
   const strikerStats = playerStats[striker] || { runs: 0, ballsFaced: 0 };
   const nonStrikerStats = playerStats[nonStriker] || { runs: 0, ballsFaced: 0 };
   const bowlerStats = playerStats[bowler] || { wickets: 0, ballsBowled: 0, runsConceded: 0 };
+
 
   return (
     <div className="min-h-screen bg-white p-2 md:p-4 py-3 md:py-6">
       <div className="max-w-5xl mx-auto space-y-3 md:space-y-4">
 
         {/* Main Score Card */}
-        <div className="bg-white rounded-xl md:rounded-3xl shadow-2xl p-2 md:p-6 border-2 border-green-600">
+        <div className= "sticky top-0 z-40 bg-white rounded-xl md:rounded-3xl shadow-2xl p-2 md:p-6 border-2 border-green-600">
           <div className="mb-2 md:mb-6">
             {/* Mobile: One Line Score */}
             <div className="md:hidden mb-2">
@@ -684,7 +776,7 @@ function ScoringPage() {
                   </div>
                   <div>
                     <p className="text-green-700 font-bold">W</p>
-                    <p className="text-black font-black text-red-600">{bowlerStats.wickets}</p>
+                    <p className=" font-black text-red-600">{bowlerStats.wickets}</p>
                   </div>
                   <div>
                     <p className="text-green-700 font-bold">EC</p>
@@ -748,12 +840,22 @@ function ScoringPage() {
         </div>
 
         {/* Current Over Display */}
+        {/* Previous Overs Slider */}
         {ballHistory.length > 0 && (
-          <div className="bg-white rounded-xl md:rounded-3xl shadow-2xl p-3 md:p-6 border-2 border-green-600">
+          <div 
+            className="bg-white rounded-xl md:rounded-3xl shadow-2xl p-3 md:p-6 border-2 border-green-600 mb-4 md:mb-6"
+            onTouchStart={handleSwipe}
+          >
+            {/* Header */}
             <div className="flex items-center justify-between mb-3 md:mb-4">
-              <h3 className="text-base md:text-xl font-black text-black">
-                Current Over
-              </h3>
+              <div>
+                <h3 className="text-base md:text-xl font-black text-black">
+                  Over {selectedOverIndex === 0 ? 1 : selectedOverIndex + 1}
+                </h3>
+                <p className="text-xs md:text-sm text-gray-600">
+                  {selectedOverIndex === currentOver ? '📍 Current Over' : '⏮️ Previous Over'}
+                </p>
+              </div>
               <div className="text-right">
                 <p className="text-gray-600 text-xs font-bold">BOWLER</p>
                 <p className="text-green-700 font-black text-sm md:text-base">
@@ -762,10 +864,10 @@ function ScoringPage() {
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-1.5 md:gap-2">
+            {/* Balls Display */}
+            <div className="flex flex-wrap gap-1 md:gap-2 items-center">
               {(() => {
-                const ballsInOver = ballsCompleted % 6;
-                const overBalls = ballHistory.slice(-ballsInOver);
+                const overBalls = ballHistory.filter(ball => ball.over === selectedOverIndex);
 
                 if (overBalls.length === 0) {
                   return (
@@ -781,18 +883,20 @@ function ScoringPage() {
                   return (
                     <div
                       key={idx}
-                      className={`flex items-center justify-center min-w-8 h-8 md:min-w-10 md:h-10 px-1.5 md:px-2 py-1 md:py-2 rounded-lg font-black text-xs md:text-sm border-2 ${ball.type === 'wicket'
-                        ? 'bg-red-600 border-red-700 text-white'
-                        : ball.isFreeDelivery
-                          ? 'bg-yellow-600 border-yellow-700 text-white'
+                      className={`flex items-center justify-center font-black transition ${
+                        ball.type === 'wicket'
+                          ? 'md:w-14 md:h-14 w-8 h-8 md:text-lg text-[10px]  border-2 border-red-600 text-red-700 rounded-full'
+                          : ball.isFreeDelivery
+                          ? 'md:w-16 md:h-16 w-8 h-8 md:text-xl text-[10px]  border-2 border-orange-600 text-orange-700 rounded-full'
                           : ball.runs === 6
-                            ? 'bg-red-500 border-red-600 text-white'
-                            : ball.runs === 4
-                              ? 'bg-blue-600 border-blue-700 text-white'
-                              : ball.runs === 0
-                                ? 'bg-gray-400 border-gray-600 text-white'
-                                : 'bg-green-600 border-green-700 text-white'
-                        }`}
+                          ? 'md:w-12 md:h-12 w-8 h-8 md:text-base text-[10px]  text-amber-500 border-2 border-green-700 rounded-full'
+                          : ball.runs === 4
+                          ? 'md:w-12 md:h-12 w-8 h-8 md:text-base text-[10px]  border-2 border-green-700 text-amber-500  rounded-full'
+                          : ball.runs === 0
+                          ? 'md:w-12 md:h-12 w-8 h-8 md:text-base text-[10px] border-2 border-green-700 text-black rounded-full'
+                          : 'md:w-12 md:h-12 w-8 h-8 md:text-base text-[10px]  border-2 border-green-700 text-black rounded-full'
+                      }`}
+                      title={`${ball.strikerName}: ${displayText}`}
                     >
                       {displayText}
                     </div>
@@ -801,11 +905,48 @@ function ScoringPage() {
               })()}
             </div>
 
-            <div className="mt-2 text-xs text-gray-600 text-center">
-              {ballsCompleted % 6} / 6 balls in this over
+            {/* Navigation Buttons - Display 1+ but use 0-based internally */}
+            <div className="flex items-center justify-between mt-4 pt-3 border-t-2 border-gray-200">
+              <button
+                onClick={handleSwipeRight}
+                disabled={selectedOverIndex === 0}
+                className="px-2 w-7 h-8 md:px-4 py-1 md:py-3 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-300 text-white rounded-lg font-bold text-sm md:text-base transition"
+              >
+                ← 
+              </button>
+
+              {/* Show over numbers from 1 to current, but use 0-based internally */}
+              <div className="flex gap-1 md:gap-2 overflow-x-auto px-2">
+                {Array.from({ length: currentOver + 1 }, (_, i) => i).map(overIndex => (
+                  <button
+                    key={overIndex}
+                    onClick={() => setSelectedOverIndex(overIndex)}
+                    className={`px-2 md:px-3 py-1 md:py-2 rounded-lg font-black text-xs md:text-sm transition ${
+                      selectedOverIndex === overIndex
+                        ? 'bg-green-600 text-white border-2 border-green-700'
+                        : 'bg-gray-200 text-black hover:bg-gray-300 border-2 border-gray-400'
+                    }`}
+                  >
+                    {overIndex + 1}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={handleSwipeLeft}
+                disabled={selectedOverIndex === currentOver}
+                className="px-2 w-7 h-8 md:px-4 py-1 md:py-3 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-300 text-white rounded-lg font-bold text-sm md:text-base transition"
+              >
+                 →
+              </button>
             </div>
+
+            {/* Swipe Hint */}
+            <p className="text-xs text-gray-500 text-center mt-2">💫 Swipe or click buttons to navigate</p>
           </div>
         )}
+
+
 
         {/* Scoring Interface */}
         <div className="bg-white rounded-xl md:rounded-3xl shadow-2xl p-3 md:p-6 border-2 border-green-600">

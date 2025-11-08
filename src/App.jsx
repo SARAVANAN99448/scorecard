@@ -13,7 +13,7 @@ import './index.css'
 function App() {
   return (
     <Router>
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50">
+      <div className="min-h-screen  from-blue-50 via-white to-green-50">
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/setup" element={<MatchSetupPage />} />
