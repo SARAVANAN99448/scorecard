@@ -482,11 +482,17 @@ function ScoringPage() {
     setBallHistory(ballHistory.slice(0, -1));
 
     if (lastBall.type === 'wicket') {
+      // FIXED: Undo run-out extra runs
+      if (lastBall.runs && lastBall.runs > 0) {
+        setScore(score - lastBall.runs);
+        updatePlayerStats(lastBall.bowlerName, 'runsConceded', -lastBall.runs);
+      }
+
       setWickets(wickets - 1);
       setBallsCompleted(ballsCompleted - 1);
       updatePlayerStats(lastBall.bowlerName, 'wickets', -1);
 
-      if (lastBall.details.selectedBatsman === 'nonstriker') {
+      if (lastBall.details?.selectedBatsman === 'nonstriker') {
         setNonStriker(lastBall.batsmanName);
       } else {
         setStriker(lastBall.batsmanName);
@@ -524,6 +530,7 @@ function ScoringPage() {
 
     setPendingExtra(null);
   };
+
 
   const calculateCapHolders = () => {
     const players = Object.entries(playerStats);
@@ -616,7 +623,7 @@ function ScoringPage() {
 
 
   return (
-    <div className="min-h-screen bg-white p-2 md:p-4 py-3 md:py-6">
+    <div className="min-h-screen bg-white px-3 md:p-4 py-3 md:py-6">
       <div className="max-w-5xl mx-auto space-y-3 md:space-y-4">
 
         {/* Main Score Card */}
@@ -856,12 +863,20 @@ function ScoringPage() {
                   {selectedOverIndex === currentOver ? '📍 Current Over' : '⏮️ Previous Over'}
                 </p>
               </div>
-              <div className="text-right">
+                           <div className="text-right">
                 <p className="text-gray-600 text-xs font-bold">BOWLER</p>
                 <p className="text-green-700 font-black text-sm md:text-base">
-                  {bowler || 'Select Bowler'}
+                  {(() => {
+                    // Get the bowler for the selected over
+                    const overBalls = ballHistory.filter(ball => ball.over === selectedOverIndex);
+                    if (overBalls.length > 0) {
+                      return overBalls[0].bowlerName || 'N/A';
+                    }
+                    return bowler || 'Select Bowler';
+                  })()}
                 </p>
               </div>
+
             </div>
 
             {/* Balls Display */}
