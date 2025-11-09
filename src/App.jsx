@@ -8,6 +8,7 @@ import MatchDetails from './components/MatchDetails';
 import LiveScorecard from './pages/LiveScorecard'
 import AdminPanel from './pages/AdminPanel';
 import MatchSetupPage from './pages/MatchSetupPage';
+import SeriesStatsPage from './components/SeriesStatsPage';
 import './index.css'
 
 function App() {
@@ -21,6 +22,7 @@ function App() {
           <Route path="/scoring" element={<ScoringPage />} />
           <Route path="/history" element={<MatchHistory />} />
           <Route path="/scorecard" element={<LiveScorecard />} />
+          <Route path="/series-stats" element={<SeriesStatsPage />} />
           <Route path="/match/:matchId" element={<MatchDetails />} />
           <Route path="/admin" element={<AdminPanel />} />
         </Routes>
