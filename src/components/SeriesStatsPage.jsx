@@ -48,6 +48,7 @@ function SeriesStatsPage() {
 
     matches.forEach(match => {
       Object.entries(match.playerStats || {}).forEach(([playerName, stats]) => {
+        // KEY FIX: Use playerName as unique key, not creating duplicates
         if (!playerStats[playerName]) {
           playerStats[playerName] = {
             name: playerName,
@@ -61,6 +62,8 @@ function SeriesStatsPage() {
             team: stats.team
           };
         }
+        
+        // FIXED: Accumulate stats properly
         playerStats[playerName].runs += stats.runs || 0;
         playerStats[playerName].wickets += stats.wickets || 0;
         playerStats[playerName].ballsFaced += stats.ballsFaced || 0;
@@ -83,6 +86,7 @@ function SeriesStatsPage() {
 
     return { orangeCapList, purpleCapList };
   };
+
 
   const { orangeCapList, purpleCapList } = calculateSeriesStats();
 

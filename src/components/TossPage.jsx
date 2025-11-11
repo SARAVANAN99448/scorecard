@@ -41,7 +41,6 @@ function TossPage() {
   const handleCallSelect = (call) => {
     if (!isFlipping) setSelectedCall(call);
   };
-
   const flipCoin = () => {
     if (!selectedTeam || !selectedCall) {
       alert('Please select both team and call (Head/Tail)');
@@ -54,22 +53,23 @@ function TossPage() {
     setShowBatBowlChoice(false);
     setSelectedChoice('');
 
-    let rotation = 0;
+    const result = Math.random() < 0.5 ? 'heads' : 'tails';
     const flipDuration = 2000;
     const startTime = Date.now();
-    
-    const result = Math.random() < 0.5 ? 'heads' : 'tails';
     const finalRotation = result === 'heads' ? 0 : 1080;
+
+    let animationFrameId;
 
     const animate = () => {
       const elapsed = Date.now() - startTime;
-      const progress = elapsed / flipDuration;
+      const progress = Math.min(elapsed / flipDuration, 1); // Ensure progress never exceeds 1
 
       if (progress < 1) {
-        rotation = progress * finalRotation;
+        const rotation = progress * finalRotation;
         setCoinRotation(rotation);
-        requestAnimationFrame(animate);
+        animationFrameId = requestAnimationFrame(animate);
       } else {
+        // Animation complete
         setCoinRotation(finalRotation);
         setTossResult(result);
 
@@ -88,7 +88,30 @@ function TossPage() {
       }
     };
 
-    requestAnimationFrame(animate);
+    // Start animation
+    animationFrameId = requestAnimationFrame(animate);
+
+    // Fallback: Force completion if animation doesn't finish
+    setTimeout(() => {
+      if (isFlipping) {
+        cancelAnimationFrame(animationFrameId);
+        setCoinRotation(finalRotation);
+        setTossResult(result);
+
+        const callMatches = (selectedCall === 'heads' && result === 'heads') || 
+                           (selectedCall === 'tails' && result === 'tails');
+
+        if (callMatches) {
+          setTossWinner(selectedTeam);
+        } else {
+          const otherTeam = selectedTeam === matchSettings.teamA ? matchSettings.teamB : matchSettings.teamA;
+          setTossWinner(otherTeam);
+        }
+
+        setShowBatBowlChoice(true);
+        setIsFlipping(false);
+      }
+    }, flipDuration + 500); // Extra 500ms buffer
   };
 
   const handleBatBowlChoice = (choice) => {

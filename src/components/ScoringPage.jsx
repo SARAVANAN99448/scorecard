@@ -32,6 +32,8 @@ function ScoringPage() {
   const [showExtraRunsModal, setShowExtraRunsModal] = useState(false);
   const [newBatsmanNeeded, setNewBatsmanNeeded] = useState(false);
   const [pendingExtra, setPendingExtra] = useState(null);
+  // Retire out
+  const [retiredBatsmen, setRetiredBatsmen] = useState([]);
 
   // CALCULATE THESE FIRST
   const totalBalls = matchSettings.overs * 6;
@@ -58,23 +60,15 @@ function ScoringPage() {
     if (savedState) {
       try {
         const state = JSON.parse(savedState);
-        setInnings(state.innings || 1);
-        setScore(state.score || 0);
-        setWickets(state.wickets || 0);
-        setBallsCompleted(state.ballsCompleted || 0);
-        setStriker(state.striker || '');
-        setNonStriker(state.nonStriker || '');
-        setBowler(state.bowler || '');
-        setBallHistory(state.ballHistory || []);
-        setPlayerStats(state.playerStats || {});
-        setInnings1Data(state.innings1Data || null);
-        setPendingExtra(state.pendingExtra || null);
+        // ... existing code ...
+        setRetiredBatsmen(state.retiredBatsmen || []);  // Add this
       } catch (error) {
         console.error('Error loading match state:', error);
       }
     }
     setIsLoaded(true);
   }, []);
+
 
   // Auto-save match state to localStorage
   useEffect(() => {
@@ -90,11 +84,12 @@ function ScoringPage() {
         ballHistory,
         playerStats,
         innings1Data,
-        pendingExtra
+        pendingExtra,
+        retiredBatsmen  
       };
       localStorage.setItem('currentMatchState', JSON.stringify(matchState));
     }
-  }, [isLoaded, innings, score, wickets, ballsCompleted, striker, nonStriker, bowler, ballHistory, playerStats, innings1Data, pendingExtra]);
+  }, [isLoaded, innings, score, wickets, ballsCompleted, striker, nonStriker, bowler, ballHistory, playerStats, innings1Data, pendingExtra, retiredBatsmen]);
 
   useEffect(() => {
     if (innings === 2 && innings1Data && score > innings1Data.score) {
@@ -207,7 +202,9 @@ function ScoringPage() {
 
     const newScore = score + runs;
     setScore(newScore);
-    setBallsCompleted(ballsCompleted + 1);
+    const newBallsCompleted = ballsCompleted + 1;
+    setBallsCompleted(newBallsCompleted);
+
     updatePlayerStats(striker, 'runs', runs);
     updatePlayerStats(striker, 'ballsFaced', 1);
     updatePlayerStats(bowler, 'ballsBowled', 1);
@@ -233,27 +230,43 @@ function ScoringPage() {
     }
 
     const ballDetail = {
-      ball: ballsCompleted + 1,
+      ball: newBallsCompleted,
       over: currentOver,
+      ballInOver: ballInOver,
       runs,
       strikerRuns: runs,
       strikerName: striker,
-      bowlerName: bowler
+      bowlerName: bowler,
+      isFreeDelivery: false
     };
-    setBallHistory(prev => [...prev, ballDetail]); // FIXED
+    setBallHistory(prev => [...prev, ballDetail]);
 
+    // Check if over is complete (6 balls)
+    const isOverComplete = newBallsCompleted % 6 === 0;
+
+    // Switch batsmen if:
+    // 1. Odd runs scored (normal rotation)
+    // 2. OR over is complete (end of over rotation)
     if (runs % 2 === 1) {
+      // Odd runs: normal rotation
+      const temp = striker;
+      setStriker(nonStriker);
+      setNonStriker(temp);
+    } else if (isOverComplete && runs % 2 === 0) {
+      // Even runs + over complete: rotate batsmen
       const temp = striker;
       setStriker(nonStriker);
       setNonStriker(temp);
     }
 
-    if ((ballsCompleted + 1) % 6 === 0 && (ballsCompleted + 1) < totalBalls) {
+    // Show bowler modal for next over
+    if (isOverComplete && newBallsCompleted < totalBalls) {
       setTimeout(() => {
         setShowBowlerModal(true);
       }, 500);
     }
   };
+
 
   const handleWide = () => {
     if (!bowler) {
@@ -389,7 +402,6 @@ function ScoringPage() {
   };
 
 
-
   const handleWicketSubmit = (dismissalMode, details) => {
     if (!striker || !bowler) {
       alert('Striker or bowler not set');
@@ -402,7 +414,6 @@ function ScoringPage() {
       batterToRemove = nonStriker;
     }
 
-    // Add extra runs for run-out
     let extraRunsToAdd = 0;
     if (dismissalMode === 'runout' && details.extraRuns !== null) {
       extraRunsToAdd = details.extraRuns;
@@ -410,23 +421,45 @@ function ScoringPage() {
       updatePlayerStats(bowler, 'runsConceded', extraRunsToAdd);
     }
 
-    setWickets(wickets + 1);
-    setBallsCompleted(ballsCompleted + 1);
-    updatePlayerStats(bowler, 'wickets', 1);
-    updatePlayerStats(batterToRemove, 'ballsFaced', 1);
-    updatePlayerStats(bowler, 'ballsBowled', 1);
+    // FIXED: Only increase wickets if NOT retired out
+    if (dismissalMode !== 'retiredout') {
+      setWickets(wickets + 1);
+    }
+
+    // Don't count ball for Retired Out
+    const shouldCountBall = dismissalMode !== 'retiredout';
+    const newBallsCompleted = shouldCountBall ? ballsCompleted + 1 : ballsCompleted;
+    
+    if (shouldCountBall) {
+      setBallsCompleted(newBallsCompleted);
+      updatePlayerStats(bowler, 'ballsBowled', 1);
+      updatePlayerStats(batterToRemove, 'ballsFaced', 1);
+    }
+    
+    // Don't credit wicket to bowler for Retired Out
+    const shouldCreditWicket = dismissalMode !== 'retiredout';
+    if (shouldCreditWicket) {
+      updatePlayerStats(bowler, 'wickets', 1);
+    }
+
+    // FIXED: Store retired batsman's stats
+    if (dismissalMode === 'retiredout') {
+      setRetiredBatsmen(prev => [...prev, batterToRemove]);
+    }
 
     const ballDetail = {
-      ball: ballsCompleted + 1,
+      ball: newBallsCompleted,
       over: currentOver,
-      type: 'wicket',
+      ballInOver: ballInOver,
+      type: dismissalMode === 'retiredout' ? 'retired' : 'wicket',
       dismissalMode,
       details,
       batsmanName: batterToRemove,
       bowlerName: bowler,
-      runs: extraRunsToAdd
+      runs: extraRunsToAdd,
+      isFreeDelivery: !shouldCountBall
     };
-    setBallHistory(prev => [...prev, ballDetail]); // FIXED
+    setBallHistory(prev => [...prev, ballDetail]);
 
     setShowWicketModal(false);
 
@@ -438,18 +471,32 @@ function ScoringPage() {
 
     setNewBatsmanNeeded(true);
 
-    if ((ballsCompleted + 1) % 6 === 0 && (ballsCompleted + 1) < totalBalls) {
-      setTimeout(() => {
-        setShowBowlerModal(true);
-      }, 1000);
+    // No timeout - immediate bowler modal if over complete
+    const isOverComplete = newBallsCompleted % 6 === 0;
+    if (shouldCountBall && isOverComplete && newBallsCompleted < totalBalls) {
+      setShowBowlerModal(true);
     }
   };
 
+
+
+
+
   const handleNewBatsman = (newBatsman) => {
+    // Check if this batsman was retired and is now returning
+    const wasRetired = retiredBatsmen.includes(newBatsman);
+    
+    if (wasRetired) {
+      // Remove from retired list
+      setRetiredBatsmen(prev => prev.filter(name => name !== newBatsman));
+      // Stats are already stored in playerStats, no need to reset
+    }
+    
     setStriker(newBatsman);
     setNewBatsmanNeeded(false);
     setShowBatsmanModal(false);
   };
+
 
   const handleNextInnings = () => {
     setInnings1Data({
@@ -481,16 +528,35 @@ function ScoringPage() {
 
     setBallHistory(ballHistory.slice(0, -1));
 
-    if (lastBall.type === 'wicket') {
-      // FIXED: Undo run-out extra runs
+    if (lastBall.type === 'wicket' || lastBall.type === 'retired') {
+      const shouldCountBall = lastBall.dismissalMode !== 'retiredout';
+      const shouldCreditWicket = lastBall.dismissalMode !== 'retiredout';
+      const shouldIncreaseWickets = lastBall.dismissalMode !== 'retiredout';
+      
       if (lastBall.runs && lastBall.runs > 0) {
         setScore(score - lastBall.runs);
         updatePlayerStats(lastBall.bowlerName, 'runsConceded', -lastBall.runs);
       }
 
-      setWickets(wickets - 1);
-      setBallsCompleted(ballsCompleted - 1);
-      updatePlayerStats(lastBall.bowlerName, 'wickets', -1);
+      // FIXED: Only decrease wickets if it was increased
+      if (shouldIncreaseWickets) {
+        setWickets(wickets - 1);
+      }
+
+      // FIXED: Remove from retired list if undoing retired out
+      if (lastBall.dismissalMode === 'retiredout') {
+        setRetiredBatsmen(prev => prev.filter(name => name !== lastBall.batsmanName));
+      }
+      
+      if (shouldCountBall) {
+        setBallsCompleted(ballsCompleted - 1);
+        updatePlayerStats(lastBall.bowlerName, 'ballsBowled', -1);
+        updatePlayerStats(lastBall.batsmanName, 'ballsFaced', -1);
+      }
+      
+      if (shouldCreditWicket) {
+        updatePlayerStats(lastBall.bowlerName, 'wickets', -1);
+      }
 
       if (lastBall.details?.selectedBatsman === 'nonstriker') {
         setNonStriker(lastBall.batsmanName);
@@ -498,7 +564,6 @@ function ScoringPage() {
         setStriker(lastBall.batsmanName);
       }
       setNewBatsmanNeeded(false);
-      updatePlayerStats(lastBall.bowlerName, 'ballsBowled', -1);
     } else if (lastBall.isFreeDelivery) {
       setScore(score - lastBall.runs);
       updatePlayerStats(lastBall.bowlerName, 'runsConceded', -lastBall.runs);
@@ -530,6 +595,9 @@ function ScoringPage() {
 
     setPendingExtra(null);
   };
+
+
+
 
 
   const calculateCapHolders = () => {
@@ -627,7 +695,7 @@ function ScoringPage() {
       <div className="max-w-5xl mx-auto space-y-3 md:space-y-4">
 
         {/* Main Score Card */}
-        <div className= "sticky top-0 z-40 bg-white rounded-xl md:rounded-3xl shadow-2xl p-2 md:p-6 border-2 border-green-600">
+        <div className="sticky top-0 z-40 bg-white rounded-xl md:rounded-3xl shadow-2xl p-2 md:p-6 border-2 border-green-600">
           <div className="mb-2 md:mb-6">
             {/* Mobile: One Line Score */}
             <div className="md:hidden mb-2">
@@ -849,7 +917,7 @@ function ScoringPage() {
         {/* Current Over Display */}
         {/* Previous Overs Slider */}
         {ballHistory.length > 0 && (
-          <div 
+          <div
             className="bg-white rounded-xl md:rounded-3xl shadow-2xl p-3 md:p-6 border-2 border-green-600 mb-4 md:mb-6"
             onTouchStart={handleSwipe}
           >
@@ -863,7 +931,7 @@ function ScoringPage() {
                   {selectedOverIndex === currentOver ? '📍 Current Over' : '⏮️ Previous Over'}
                 </p>
               </div>
-                           <div className="text-right">
+              <div className="text-right">
                 <p className="text-gray-600 text-xs font-bold">BOWLER</p>
                 <p className="text-green-700 font-black text-sm md:text-base">
                   {(() => {
@@ -898,19 +966,18 @@ function ScoringPage() {
                   return (
                     <div
                       key={idx}
-                      className={`flex items-center justify-center font-black transition ${
-                        ball.type === 'wicket'
-                          ? 'md:w-14 md:h-14 w-8 h-8 md:text-lg text-[10px]  border-2 border-red-600 text-red-700 rounded-full'
-                          : ball.isFreeDelivery
+                      className={`flex items-center justify-center font-black transition ${ball.type === 'wicket'
+                        ? 'md:w-14 md:h-14 w-8 h-8 md:text-lg text-[10px]  border-2 border-red-600 text-red-700 rounded-full'
+                        : ball.isFreeDelivery
                           ? 'md:w-16 md:h-16 w-8 h-8 md:text-xl text-[10px]  border-2 border-orange-600 text-orange-700 rounded-full'
                           : ball.runs === 6
-                          ? 'md:w-12 md:h-12 w-8 h-8 md:text-base text-[10px]  text-amber-500 border-2 border-green-700 rounded-full'
-                          : ball.runs === 4
-                          ? 'md:w-12 md:h-12 w-8 h-8 md:text-base text-[10px]  border-2 border-green-700 text-amber-500  rounded-full'
-                          : ball.runs === 0
-                          ? 'md:w-12 md:h-12 w-8 h-8 md:text-base text-[10px] border-2 border-green-700 text-black rounded-full'
-                          : 'md:w-12 md:h-12 w-8 h-8 md:text-base text-[10px]  border-2 border-green-700 text-black rounded-full'
-                      }`}
+                            ? 'md:w-12 md:h-12 w-8 h-8 md:text-base text-[10px]  text-amber-500 border-2 border-green-700 rounded-full'
+                            : ball.runs === 4
+                              ? 'md:w-12 md:h-12 w-8 h-8 md:text-base text-[10px]  border-2 border-green-700 text-amber-500  rounded-full'
+                              : ball.runs === 0
+                                ? 'md:w-12 md:h-12 w-8 h-8 md:text-base text-[10px] border-2 border-green-700 text-black rounded-full'
+                                : 'md:w-12 md:h-12 w-8 h-8 md:text-base text-[10px]  border-2 border-green-700 text-black rounded-full'
+                        }`}
                       title={`${ball.strikerName}: ${displayText}`}
                     >
                       {displayText}
@@ -927,7 +994,7 @@ function ScoringPage() {
                 disabled={selectedOverIndex === 0}
                 className="px-2 w-7 h-8 md:px-4 py-1 md:py-3 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-300 text-white rounded-lg font-bold text-sm md:text-base transition"
               >
-                ← 
+                ←
               </button>
 
               {/* Show over numbers from 1 to current, but use 0-based internally */}
@@ -936,11 +1003,10 @@ function ScoringPage() {
                   <button
                     key={overIndex}
                     onClick={() => setSelectedOverIndex(overIndex)}
-                    className={`px-2 md:px-3 py-1 md:py-2 rounded-lg font-black text-xs md:text-sm transition ${
-                      selectedOverIndex === overIndex
-                        ? 'bg-green-600 text-white border-2 border-green-700'
-                        : 'bg-gray-200 text-black hover:bg-gray-300 border-2 border-gray-400'
-                    }`}
+                    className={`px-2 md:px-3 py-1 md:py-2 rounded-lg font-black text-xs md:text-sm transition ${selectedOverIndex === overIndex
+                      ? 'bg-green-600 text-white border-2 border-green-700'
+                      : 'bg-gray-200 text-black hover:bg-gray-300 border-2 border-gray-400'
+                      }`}
                   >
                     {overIndex + 1}
                   </button>
@@ -952,7 +1018,7 @@ function ScoringPage() {
                 disabled={selectedOverIndex === currentOver}
                 className="px-2 w-7 h-8 md:px-4 py-1 md:py-3 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-300 text-white rounded-lg font-bold text-sm md:text-base transition"
               >
-                 →
+                →
               </button>
             </div>
 

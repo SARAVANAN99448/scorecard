@@ -1,227 +1,172 @@
 import React, { useState } from 'react';
-import Modal from '../ui/Modal.jsx';
+import { X } from 'lucide-react';
 
 function WicketModal({ isOpen, onClose, onSubmit, battingTeam, bowler, striker, nonStriker }) {
   const [dismissalMode, setDismissalMode] = useState('');
-  const [error, setError] = useState('');
-  const [selectedBatsman, setSelectedBatsman] = useState('');
-  const [fieldersName, setFieldersName] = useState('');
+  const [fielder, setFielder] = useState('');
+  const [selectedBatsman, setSelectedBatsman] = useState('striker');
   const [extraRuns, setExtraRuns] = useState(null);
+
+  const dismissalModes = [
+    'bowled',
+    'caught',
+    'lbw',
+    'stumped',
+    'runout',
+    'hitwicket',
+    'retiredout'
+  ];
+
+  const dismissalDisplayNames = {
+    'bowled': 'Bowled',
+    'caught': 'Caught',
+    'lbw': 'LBW',
+    'stumped': 'Stumped',
+    'runout': 'Run Out',
+    'hitwicket': 'Hit Wicket',
+    'retiredout': 'Retired Out'
+  };
 
   const handleSubmit = () => {
     if (!dismissalMode) {
-      setError('Please select a dismissal mode');
+      alert('Please select a dismissal mode');
       return;
     }
 
-    if (dismissalMode === 'runout' && !selectedBatsman) {
-      setError('Please select which batsman is out');
-      return;
-    }
-
-    if (dismissalMode === 'runout' && extraRuns === null) {
-      setError('Please select extra runs');
-      return;
-    }
-
-    if ((dismissalMode === 'caught' || dismissalMode === 'runout') && !fieldersName.trim()) {
-      setError(dismissalMode === 'caught' ? 'Please enter fielder name' : 'Please enter who helped for the run-out');
+    if ((dismissalMode === 'caught' || dismissalMode === 'stumped') && !fielder) {
+      alert('Please enter fielder name');
       return;
     }
 
     const details = {
-      dismissalMode,
-      bowler: bowler || 'N/A',
-      fieldersName: fieldersName.trim() || null,
+      fielder: fielder || null,
+      selectedBatsman: dismissalMode === 'runout' ? selectedBatsman : 'striker',
       extraRuns: dismissalMode === 'runout' ? extraRuns : null
     };
 
-    if (dismissalMode === 'runout') {
-      details.selectedBatsman = selectedBatsman;
-    }
-
     onSubmit(dismissalMode, details);
-    resetForm();
-  };
 
-  const resetForm = () => {
+    // Reset state
     setDismissalMode('');
-    setSelectedBatsman('');
-    setFieldersName('');
+    setFielder('');
+    setSelectedBatsman('striker');
     setExtraRuns(null);
-    setError('');
   };
 
-  const handleClose = () => {
-    resetForm();
-    onClose();
-  };
-
-  const isRunOutSelected = dismissalMode === 'runout';
+  if (!isOpen) return null;
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="Wicket Fallen">
-      <div className="space-y-3 md:space-y-6">
-        {/* Bowler Info - Auto-filled */}
-        <div className="p-3 md:p-4 bg-white rounded-lg md:rounded-xl border-2 border-green-600">
-          <p className="text-gray-600 text-xs md:text-sm font-bold mb-1 uppercase">💨 Bowler</p>
-          <p className="text-black font-black text-lg md:text-xl truncate">{bowler || 'N/A'}</p>
-        </div>
-
-        {/* Dismissal Mode Selection - Dropdown */}
-        <div>
-          <label className="block text-sm md:text-base font-black text-black mb-3 md:mb-4 uppercase">
-            How is the batter out?
-          </label>
-          
-          <select
-            value={dismissalMode}
-            onChange={(e) => {
-              setDismissalMode(e.target.value);
-              setSelectedBatsman('');
-              setFieldersName('');
-              setExtraRuns(null);
-              setError('');
-            }}
-            className="w-full px-3 md:px-4 py-2 md:py-3 bg-white border-2 border-green-600 text-black rounded-lg md:rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-600 outline-none text-sm md:text-base font-bold cursor-pointer"
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl p-6 max-w-md w-full border-4 border-green-600 shadow-2xl">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-2xl font-black text-black">🚪 Wicket</h2>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-gray-100 rounded-lg transition"
           >
-            <option value="">-- Select Dismissal Type --</option>
-            <option value="bowled">🎳 Bowled</option>
-            <option value="lbw">🛡️ LBW</option>
-            <option value="caught">🤲 Caught</option>
-            <option value="stumped">🚪 Stumped</option>
-            <option value="runout">🏃 Run Out</option>
-            <option value="timed_out">⏱️ Timed Out</option>
-          </select>
+            <X className="w-6 h-6" />
+          </button>
         </div>
 
-        {/* Caught: Select Fielder */}
-        {dismissalMode === 'caught' && (
-          <div className="p-3 md:p-4 bg-white rounded-lg md:rounded-xl border-2 border-green-600">
-            <label className="block text-sm md:text-base font-black text-black mb-3 md:mb-4 uppercase">
-              🧤 Caught by
+        {/* Dismissal Mode Selection */}
+        <div className="mb-4">
+          <label className="block text-sm font-bold text-gray-700 mb-2">
+            Dismissal Mode
+          </label>
+          <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto">  {/* Added scrolling */}
+            {dismissalModes.map((mode) => (
+              <button
+                key={mode}
+                onClick={() => setDismissalMode(mode)}
+                className={`px-3 py-2.5 rounded-lg font-bold transition border-2 text-xs md:text-sm ${
+                  dismissalMode === mode
+                    ? 'bg-green-600 text-white border-green-700'
+                    : 'bg-white text-black border-green-600 hover:bg-green-50'
+                }`}
+              >
+                {dismissalDisplayNames[mode]}
+              </button>
+            ))}
+          </div>
+        </div>
+
+
+        {/* Fielder Input (for Caught and Stumped) */}
+        {(dismissalMode === 'caught' || dismissalMode === 'stumped') && (
+          <div className="mb-4">
+            <label className="block text-sm font-bold text-gray-700 mb-2">
+              Fielder Name
             </label>
-            
             <input
               type="text"
-              value={fieldersName}
-              onChange={(e) => setFieldersName(e.target.value)}
+              value={fielder}
+              onChange={(e) => setFielder(e.target.value)}
               placeholder="Enter fielder name"
-              className="w-full px-3 md:px-4 py-2 md:py-3 bg-white border-2 border-green-600 text-black placeholder-gray-400 rounded-lg md:rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-600 outline-none text-sm md:text-base"
-              autoFocus
+              className="w-full px-4 py-3 border-2 border-green-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
             />
           </div>
         )}
 
-        {/* Run-Out: Select Which Batsman */}
-        {isRunOutSelected && (
-          <div className="space-y-3 md:space-y-4">
-            {/* Striker and Non-Striker in Flex Row */}
-            <div className="p-3 md:p-4 bg-white rounded-lg md:rounded-xl border-2 border-green-600">
-              <label className="block text-sm md:text-base font-black text-black mb-3 md:mb-4 uppercase">
-                Which batsman is out?
+        {/* Run Out Options */}
+        {dismissalMode === 'runout' && (
+          <>
+            <div className="mb-4">
+              <label className="block text-sm font-bold text-gray-700 mb-2">
+                Who is Out?
               </label>
-              
-              <div className="flex flex-row gap-2 md:gap-3">
-                {/* Striker Option */}
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   onClick={() => setSelectedBatsman('striker')}
-                  className={`flex-1 p-3 md:p-4 rounded-lg md:rounded-xl border-2 transition ${
-                    selectedBatsman === 'striker'
-                      ? 'border-green-600 bg-green-100 text-green-700'
-                      : 'border-gray-300 bg-white text-gray-600 hover:border-green-400'
-                  }`}
+                  className={`px-4 py-3 rounded-lg font-bold transition border-2 ${selectedBatsman === 'striker'
+                      ? 'bg-green-600 text-white border-green-700'
+                      : 'bg-white text-black border-green-600 hover:bg-green-50'
+                    }`}
                 >
-                  <div className="text-xl md:text-2xl mb-1">⚔️</div>
-                  <p className="font-bold text-xs md:text-sm">Striker</p>
-                  <p className="text-xs text-gray-600 mt-1 truncate">{striker}</p>
+                  {striker}
                 </button>
-
-                {/* Non-Striker Option */}
                 <button
                   onClick={() => setSelectedBatsman('nonstriker')}
-                  className={`flex-1 p-3 md:p-4 rounded-lg md:rounded-xl border-2 transition ${
-                    selectedBatsman === 'nonstriker'
-                      ? 'border-green-600 bg-green-100 text-green-700'
-                      : 'border-gray-300 bg-white text-gray-600 hover:border-green-400'
-                  }`}
+                  className={`px-4 py-3 rounded-lg font-bold transition border-2 ${selectedBatsman === 'nonstriker'
+                      ? 'bg-green-600 text-white border-green-700'
+                      : 'bg-white text-black border-green-600 hover:bg-green-50'
+                    }`}
                 >
-                  <div className="text-xl md:text-2xl mb-1">🤝</div>
-                  <p className="font-bold text-xs md:text-sm">Non-Striker</p>
-                  <p className="text-xs text-gray-600 mt-1 truncate">{nonStriker}</p>
+                  {nonStriker}
                 </button>
               </div>
             </div>
 
-            {/* Who helped for run-out */}
-            <div className="p-3 md:p-4 bg-white rounded-lg md:rounded-xl border-2 border-green-600">
-              <label className="block text-sm md:text-base font-black text-black mb-3 md:mb-4 uppercase">
-                👥 Who helped for the run-out?
+            <div className="mb-4">
+              <label className="block text-sm font-bold text-gray-700 mb-2">
+                Runs Before Run Out (Optional)
               </label>
-              
-              <input
-                type="text"
-                value={fieldersName}
-                onChange={(e) => setFieldersName(e.target.value)}
-                placeholder="e.g., Wicket Keeper / Fielder Name"
-                className="w-full px-3 md:px-4 py-2 md:py-3 bg-white border-2 border-green-600 text-black placeholder-gray-400 rounded-lg md:rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-600 outline-none text-sm md:text-base"
-                autoFocus
-              />
-            </div>
-
-            {/* Extra Runs Selection */}
-            <div className="p-3 md:p-4 bg-white rounded-lg md:rounded-xl border-2 border-green-600">
-              <label className="block text-sm md:text-base font-black text-black mb-3 md:mb-4 uppercase">
-                Extra Runs on Run-Out
-              </label>
-              
-              <div className="flex flex-row gap-2 md:gap-3">
-                {[0, 1, 2, 3].map((run) => (
+              <div className="grid grid-cols-4 gap-2">
+                {[0, 1, 2, 3].map((runs) => (
                   <button
-                    key={run}
-                    onClick={() => setExtraRuns(run)}
-                    className={`flex-1 w-10 h-10 md:w-12 md:h-12 rounded-full font-black text-sm md:text-base transition transform hover:scale-110 flex items-center justify-center border-2 ${
-                      extraRuns === run
-                        ? 'border-green-600 bg-green-100 text-green-700'
-                        : 'border-gray-300 bg-white text-gray-600 hover:border-green-400'
-                    }`}
+                    key={runs}
+                    onClick={() => setExtraRuns(runs)}
+                    className={`px-4 py-3 rounded-lg font-bold transition border-2 ${extraRuns === runs
+                        ? 'bg-green-600 text-white border-green-700'
+                        : 'bg-white text-black border-green-600 hover:bg-green-50'
+                      }`}
                   >
-                    {run}
+                    {runs}
                   </button>
                 ))}
               </div>
             </div>
-          </div>
+          </>
         )}
 
-        {/* Error Message */}
-        {error && (
-          <div className="p-3 md:p-4 bg-red-100 border-2 border-red-600 rounded-lg">
-            <p className="text-red-700 text-xs md:text-sm font-bold">{error}</p>
-          </div>
-        )}
-
-        {/* Buttons */}
-        <div className="flex flex-row gap-2 md:gap-3 pt-3 md:pt-4 border-t-2 border-green-600">
-          <button
-            onClick={handleClose}
-            className="flex-1 bg-white text-black py-2 md:py-3 rounded-lg md:rounded-xl font-bold hover:bg-gray-100 transition text-xs md:text-base border-2 border-green-600"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSubmit}
-            className={`flex-1 py-2 md:py-3 rounded-lg md:rounded-xl font-bold transition text-xs md:text-base border-2 ${
-              dismissalMode
-                ? 'bg-green-600 text-white hover:bg-green-700 border-green-700'
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed opacity-50 border-gray-400'
-            }`}
-          >
-            Confirm
-          </button>
-        </div>
+        {/* Submit Button */}
+        <button
+          onClick={handleSubmit}
+          className="w-full px-6 py-4 bg-red-600 text-white rounded-xl font-black hover:bg-red-700 transition text-lg border-2 border-red-700"
+        >
+          Confirm Wicket
+        </button>
       </div>
-    </Modal>
+    </div>
   );
 }
 
