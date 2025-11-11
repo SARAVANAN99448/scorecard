@@ -4,18 +4,16 @@ import { db } from '../firebase/config';
 import { collection, query, orderBy, getDocs } from 'firebase/firestore';
 import { Plus, Trophy, Check, Clock, TrendingUp } from 'lucide-react';
 
-
 function MatchHistory() {
   const navigate = useNavigate();
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedMatches, setSelectedMatches] = useState([]);
-
+  const [searchDate, setSearchDate] = useState('');
 
   useEffect(() => {
     fetchMatches();
   }, []);
-
 
   const fetchMatches = async () => {
     try {
@@ -56,6 +54,61 @@ function MatchHistory() {
     return `${dateStr} at ${timeStr}`;
   };
 
+  // Helper to get date string for grouping
+  const getDateString = (timestamp) => {
+    if (!timestamp) return 'Unknown';
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    return date.toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric'
+    });
+  };
+
+  // Group matches by date
+  const matchesByDate = matches.reduce((acc, match) => {
+    const dateStr = getDateString(match.createdAt);
+    if (!acc[dateStr]) acc[dateStr] = [];
+    acc[dateStr].push(match);
+    return acc;
+  }, {});
+
+  const uniqueDates = Object.keys(matchesByDate);
+
+  // Filter dates based on search
+  const filteredDates = uniqueDates.filter(dateStr => 
+    dateStr.toLowerCase().includes(searchDate.toLowerCase())
+  );
+
+  // Toggle Select All/Unselect All
+  const toggleSelectAll = () => {
+    if (selectedMatches.length === matches.length) {
+      // All selected, so unselect all
+      setSelectedMatches([]);
+    } else {
+      // Some or none selected, so select all
+      const allMatchIds = matches.map(m => m.id);
+      setSelectedMatches(allMatchIds);
+    }
+  };
+
+  // Select matches by date (toggle)
+  const selectMatchesByDate = (dateStr) => {
+    const matchIdsForDate = matchesByDate[dateStr].map(m => m.id);
+    const currentlySelected = new Set(selectedMatches);
+    
+    // Check if all matches from this date are already selected
+    const allSelected = matchIdsForDate.every(id => currentlySelected.has(id));
+    
+    if (allSelected) {
+      // Deselect all from this date
+      setSelectedMatches(selectedMatches.filter(id => !matchIdsForDate.includes(id)));
+    } else {
+      // Select all from this date
+      const newSelected = [...new Set([...selectedMatches, ...matchIdsForDate])];
+      setSelectedMatches(newSelected);
+    }
+  };
 
   const toggleSelectMatch = (matchId) => {
     setSelectedMatches(prev => 
@@ -64,7 +117,6 @@ function MatchHistory() {
         : [...prev, matchId]
     );
   };
-
 
   if (loading) {
     return (
@@ -76,7 +128,6 @@ function MatchHistory() {
       </div>
     );
   }
-
 
   return (
     <div className="min-h-screen bg-white p-2 md:p-4 py-4 md:py-6">
@@ -98,9 +149,63 @@ function MatchHistory() {
           </button>
         </div>
 
-
         {/* Mobile: Single Column */}
         <div className="lg:hidden">
+          {/* Select All and Date Filters */}
+          {matches.length > 0 && (
+            <div className="mb-4 space-y-3">
+              {/* Select All/Unselect All Button */}
+              <button
+                onClick={toggleSelectAll}
+                className={`w-full px-4 py-3 rounded-lg font-bold transition text-sm border-2 flex items-center justify-center gap-2 ${
+                  selectedMatches.length === matches.length
+                    ? 'bg-white text-black border-green-600 hover:bg-gray-50'
+                    : 'bg-green-600 text-white border-green-700 hover:bg-green-700'
+                }`}
+              >
+                <Check className="w-4 h-4" />
+                {selectedMatches.length === matches.length ? 'Unselect All' : 'Select All'} ({matches.length})
+              </button>
+
+              {/* Date Search */}
+              {uniqueDates.length > 1 && (
+                <div className="space-y-2">
+                  <input
+                    type="text"
+                    value={searchDate}
+                    onChange={(e) => setSearchDate(e.target.value)}
+                    placeholder="Search date (e.g., 9 Nov)"
+                    className="w-full px-4 py-2 border-2 border-green-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+                  />
+                  <p className="text-xs font-bold text-gray-600 uppercase">Select by Date</p>
+                  <div className="flex flex-wrap gap-2">
+                    {filteredDates.map(dateStr => {
+                      const matchIdsForDate = matchesByDate[dateStr].map(m => m.id);
+                      const allSelected = matchIdsForDate.every(id => selectedMatches.includes(id));
+                      
+                      return (
+                        <button
+                          key={dateStr}
+                          onClick={() => selectMatchesByDate(dateStr)}
+                          className={`px-3 py-2 rounded-lg font-bold text-xs border-2 transition ${
+                            allSelected
+                              ? 'bg-green-600 text-white border-green-700'
+                              : 'bg-white text-black border-green-600 hover:bg-green-50'
+                          }`}
+                        >
+                          {dateStr} ({matchesByDate[dateStr].length})
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {filteredDates.length === 0 && (
+                    <p className="text-xs text-gray-500 text-center py-2">No dates found</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {selectedMatches.length > 0 && (
             <div className="space-y-3 mb-4">
               {/* Action Buttons */}
@@ -125,7 +230,6 @@ function MatchHistory() {
               </div>
             </div>
           )}
-
 
           {matches.length === 0 ? (
             <div className="bg-white rounded-2xl shadow-2xl p-6 text-center border-2 border-green-600">
@@ -166,7 +270,6 @@ function MatchHistory() {
                         {isSelected && <Check className="w-3 h-3 text-white" />}
                       </button>
 
-
                       <div 
                         className="flex-1 min-w-0"
                         onClick={() => !isSelected && navigate(`/match/${match.id}`)}
@@ -185,7 +288,6 @@ function MatchHistory() {
                             </div>
                           </div>
                         </div>
-
 
                         <div className="space-y-1 text-xs mb-2">
                           <div className="flex items-center gap-2">
@@ -206,7 +308,6 @@ function MatchHistory() {
                           </div>
                         </div>
 
-
                         <div className="inline-block px-2 py-1 bg-green-100 rounded border-2 border-green-600 text-green-700 text-xs font-bold">
                           <Trophy className="w-3 h-3 inline mr-1" />
                           {match.winner}
@@ -220,9 +321,64 @@ function MatchHistory() {
           )}
         </div>
 
-
         {/* Desktop: Full Width Layout */}
         <div className="hidden lg:block">
+          {/* Select All and Date Filters */}
+          {matches.length > 0 && (
+            <div className="bg-white rounded-2xl shadow-xl p-4 border-2 border-green-600 mb-6">
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                {/* Select All/Unselect All */}
+                <button
+                  onClick={toggleSelectAll}
+                  className={`px-6 py-3 rounded-lg font-bold transition text-sm border-2 flex items-center gap-2 ${
+                    selectedMatches.length === matches.length
+                      ? 'bg-white text-black border-green-600 hover:bg-gray-50'
+                      : 'bg-green-600 text-white border-green-700 hover:bg-green-700'
+                  }`}
+                >
+                  <Check className="w-5 h-5" />
+                  {selectedMatches.length === matches.length ? 'Unselect All' : 'Select All'} ({matches.length})
+                </button>
+
+                {/* Date Filters with Search */}
+                {uniqueDates.length > 1 && (
+                  <div className="flex items-center gap-2 flex-1">
+                    <input
+                      type="text"
+                      value={searchDate}
+                      onChange={(e) => setSearchDate(e.target.value)}
+                      placeholder="Search date..."
+                      className="px-4 py-2 border-2 border-green-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm w-48"
+                    />
+                    <div className="flex flex-wrap gap-2">
+                      {filteredDates.map(dateStr => {
+                        const matchIdsForDate = matchesByDate[dateStr].map(m => m.id);
+                        const allSelected = matchIdsForDate.every(id => selectedMatches.includes(id));
+                        
+                        return (
+                          <button
+                            key={dateStr}
+                            onClick={() => selectMatchesByDate(dateStr)}
+                            className={`px-4 py-2 rounded-lg font-bold text-sm border-2 transition ${
+                              allSelected
+                                ? 'bg-green-600 text-white border-green-700'
+                                : 'bg-white text-black border-green-600 hover:bg-green-50'
+                            }`}
+                          >
+                            {dateStr} ({matchesByDate[dateStr].length})
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {filteredDates.length === 0 && (
+                      <p className="text-sm text-gray-500">No dates found</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {selectedMatches.length > 0 && (
             <div className="bg-white rounded-2xl shadow-xl p-4 border-2 border-green-600 mb-6">
               <div className="flex items-center justify-between">
@@ -292,7 +448,6 @@ function MatchHistory() {
                         {isSelected && <Check className="w-4 h-4 text-white" />}
                       </button>
 
-
                       <div 
                         className="flex-1"
                         onClick={() => !isSelected && navigate(`/match/${match.id}`)}
@@ -311,7 +466,6 @@ function MatchHistory() {
                             <span className="font-bold">{formatMatchTime(match.createdAt)}</span>
                           </div>
                         </div>
-
 
                         <div className="space-y-2 text-sm md:text-base mb-4">
                           <div className="flex items-center gap-2">
@@ -332,7 +486,6 @@ function MatchHistory() {
                           </div>
                         </div>
 
-
                         <div className="inline-block px-4 py-2 bg-green-100 rounded-lg border-2 border-green-600">
                           <span className="text-green-700 font-bold flex items-center gap-2">
                             <Trophy className="w-4 h-4" />
@@ -351,6 +504,5 @@ function MatchHistory() {
     </div>
   );
 }
-
 
 export default MatchHistory;
