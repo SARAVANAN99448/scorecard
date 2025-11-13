@@ -279,18 +279,20 @@ function ScoringPage() {
 
     const ballDetail = {
       ball: ballsCompleted,
-      over: currentOver, // Store as NUMBER not string
+      over: currentOver,
       ballInOver: ballInOver,
       runs: matchSettings.wideRuns,
       strikerRuns: 0,
       strikerName: striker,
       bowlerName: bowler,
       type: 'wide',
+      extraType: 'wide',  // ⚠️ ADD THIS LINE
       isFreeDelivery: true,
       displayText: 'WD'
     };
     setBallHistory(prev => [...prev, ballDetail]);
   };
+
 
   const handleNoBall = () => {
     if (!bowler) {
@@ -303,18 +305,20 @@ function ScoringPage() {
 
     const ballDetail = {
       ball: ballsCompleted,
-      over: currentOver, // Store as NUMBER not string
+      over: currentOver,
       ballInOver: ballInOver,
       runs: matchSettings.noBallRuns,
       strikerRuns: 0,
       strikerName: striker,
       bowlerName: bowler,
       type: 'noball',
+      extraType: 'noball',  // ⚠️ ADD THIS LINE
       isFreeDelivery: true,
       displayText: 'NB'
     };
     setBallHistory(prev => [...prev, ballDetail]);
   };
+
 
 
 
@@ -503,7 +507,8 @@ function ScoringPage() {
       team: currentBattingTeam,
       score,
       wickets,
-      overs: oversDisplay
+      overs: oversDisplay,
+      ballHistory: ballHistory  // ⚠️ ADD THIS LINE
     });
 
     setInnings(2);
@@ -517,6 +522,7 @@ function ScoringPage() {
     setPendingExtra(null);
     setShowBatsmanModal(true);
   };
+
 
   const undoLastBall = () => {
     if (ballHistory.length === 0) {
@@ -640,25 +646,29 @@ function ScoringPage() {
         battingTeam: innings1Data.team,
         score: innings1Data.score,
         wickets: innings1Data.wickets,
-        overs: innings1Data.overs
+        overs: innings1Data.overs,
+        ballHistory: innings1Data.ballHistory || []  // ⚠️ ADD THIS
       },
       innings2: {
         battingTeam: currentBattingTeam,
         score: score,
         wickets: wickets,
-        overs: oversDisplay
+        overs: oversDisplay,
+        ballHistory: ballHistory || []  // ⚠️ ALREADY EXISTS
       },
       winner: winner,
       winMargin: winMargin,
       winType: winType,
       matchSettings: matchSettings,
       playerStats: playerStats,
-      ballHistory: ballHistory,
       orangeCap: orangeCap,
       purpleCap: purpleCap,
       createdAt: serverTimestamp(),
       timestamp: Date.now()
     };
+
+    console.log('Saving match with innings1 ball history:', innings1Data.ballHistory?.length || 0);
+    console.log('Saving match with innings2 ball history:', ballHistory.length);
 
     try {
       const docRef = await addDoc(collection(db, 'matches'), matchData);
@@ -683,6 +693,7 @@ function ScoringPage() {
       alert('Failed to save match');
     }
   };
+
 
 
   const strikerStats = playerStats[striker] || { runs: 0, ballsFaced: 0 };
