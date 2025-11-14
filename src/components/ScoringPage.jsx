@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import  { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../firebase/config';
 import { collection, addDoc, doc, setDoc, serverTimestamp } from 'firebase/firestore';
@@ -7,11 +7,15 @@ import BatsmanModal from './modals/BatsmanModal';
 import BowlerModal from './modals/BowlerModal';
 import WicketModal from './modals/WicketModal';
 import ExtraRunsModal from './modals/ExtraRunsModal';
+import React, {  useRef } from 'react';
+
 
 function ScoringPage() {
   const navigate = useNavigate();
   const matchSettings = JSON.parse(localStorage.getItem('matchSettings'));
 
+
+  
   const [innings, setInnings] = useState(1);
   const [score, setScore] = useState(0);
   const [wickets, setWickets] = useState(0);
@@ -25,6 +29,9 @@ function ScoringPage() {
   const [playerStats, setPlayerStats] = useState({});
   const [innings1Data, setInnings1Data] = useState(null);
   const [isLoaded, setIsLoaded] = useState(false);
+
+  const [shouldRotateAfterBowler, setShouldRotateAfterBowler] = useState(false);
+  const pendingRotationRef = useRef(false);
 
   const [showBatsmanModal, setShowBatsmanModal] = useState(false);
   const [showBowlerModal, setShowBowlerModal] = useState(false);
@@ -54,6 +61,7 @@ function ScoringPage() {
     setSelectedOverIndex(currentOver);
   }, [currentOver]);
 
+ 
   // Load match state from localStorage on component mount
   useEffect(() => {
     const savedState = localStorage.getItem('currentMatchState');
@@ -85,7 +93,7 @@ function ScoringPage() {
         playerStats,
         innings1Data,
         pendingExtra,
-        retiredBatsmen  
+        retiredBatsmen
       };
       localStorage.setItem('currentMatchState', JSON.stringify(matchState));
     }
@@ -188,11 +196,25 @@ function ScoringPage() {
     setNonStriker(batsman2);
     setShowBatsmanModal(false);
   };
-
   const handleBowlerSelected = (bowlerName) => {
+    const shouldRotate = pendingRotationRef.current;  // Get pending rotation status
+    
     setBowler(bowlerName);
     setShowBowlerModal(false);
+    
+    if (shouldRotate) {
+      // Rotate batsmen after a small delay to ensure state is settled
+      setTimeout(() => {
+        const tempStriker = striker;
+        const tempNonStriker = nonStriker;
+        setStriker(tempNonStriker);
+        setNonStriker(tempStriker);
+        pendingRotationRef.current = false;  // Reset the flag
+      }, 100);
+    }
   };
+
+
 
   const handleRuns = (runs) => {
     if (!striker || !bowler) {
@@ -204,13 +226,12 @@ function ScoringPage() {
     setScore(newScore);
     const newBallsCompleted = ballsCompleted + 1;
     setBallsCompleted(newBallsCompleted);
-
+    
     updatePlayerStats(striker, 'runs', runs);
     updatePlayerStats(striker, 'ballsFaced', 1);
     updatePlayerStats(bowler, 'ballsBowled', 1);
     updatePlayerStats(bowler, 'runsConceded', runs);
 
-    // Count Fours and Sixes
     if (runs === 4) {
       setPlayerStats(prev => ({
         ...prev,
@@ -241,31 +262,39 @@ function ScoringPage() {
     };
     setBallHistory(prev => [...prev, ballDetail]);
 
-    // Check if over is complete (6 balls)
     const isOverComplete = newBallsCompleted % 6 === 0;
+    const isOddRun = runs % 2 === 1;
 
-    // Switch batsmen if:
-    // 1. Odd runs scored (normal rotation)
-    // 2. OR over is complete (end of over rotation)
-    if (runs % 2 === 1) {
-      // Odd runs: normal rotation
+    // CORRECT LOGIC:
+    // If over complete with ODD runs: DON'T rotate (they'll rotate at over end)
+    // If over complete with EVEN runs: Rotate at over end
+    // If over NOT complete with ODD runs: Rotate immediately
+    // If over NOT complete with EVEN runs: Don't rotate
+
+    if (isOverComplete) {
+      // Over complete - rotation will happen when bowler is selected
+      // If ODD runs, striker stays on strike (because over-end rotation will swap them)
+      // If EVEN runs, striker goes to non-striker (over-end rotation)
+      pendingRotationRef.current = !isOddRun;  // ⚠️ KEY FIX: Only rotate if EVEN runs
+      
+      if (newBallsCompleted < totalBalls) {
+        setTimeout(() => {
+          setShowBowlerModal(true);
+        }, 500);
+      }
+    } else if (isOddRun) {
+      // Odd runs in middle of over - rotate immediately
       const temp = striker;
       setStriker(nonStriker);
       setNonStriker(temp);
-    } else if (isOverComplete && runs % 2 === 0) {
-      // Even runs + over complete: rotate batsmen
-      const temp = striker;
-      setStriker(nonStriker);
-      setNonStriker(temp);
-    }
-
-    // Show bowler modal for next over
-    if (isOverComplete && newBallsCompleted < totalBalls) {
-      setTimeout(() => {
-        setShowBowlerModal(true);
-      }, 500);
     }
   };
+
+
+
+
+
+
 
 
   const handleWide = () => {
@@ -333,69 +362,53 @@ function ScoringPage() {
       return;
     }
 
-    const extraRuns = pendingExtra === 'wide' ? matchSettings.wideRuns : matchSettings.noBallRuns;
+    const extraType = pendingExtra;
+    const extraRuns = extraType === 'wide' ? matchSettings.wideRuns : matchSettings.noBallRuns;
     const totalRuns = extraRuns + runs;
-    setScore(score + totalRuns);
 
+    const newScore = score + totalRuns;
+    setScore(newScore);
+
+    updatePlayerStats(striker, 'runs', runs);
+    updatePlayerStats(striker, 'ballsFaced', 1);
     updatePlayerStats(bowler, 'runsConceded', totalRuns);
 
-    if (runs > 0) {
-      updatePlayerStats(striker, 'runs', runs);
-      updatePlayerStats(striker, 'ballsFaced', 1);
-
-      if (runs === 4) {
-        setPlayerStats(prev => ({
-          ...prev,
-          [striker]: {
-            ...prev[striker],
-            fours: (prev[striker]?.fours || 0) + 1
-          }
-        }));
-      } else if (runs === 6) {
-        setPlayerStats(prev => ({
-          ...prev,
-          [striker]: {
-            ...prev[striker],
-            sixes: (prev[striker]?.sixes || 0) + 1
-          }
-        }));
-      }
+    if (runs === 4) {
+      setPlayerStats(prev => ({
+        ...prev,
+        [striker]: {
+          ...prev[striker],
+          fours: (prev[striker]?.fours || 0) + 1
+        }
+      }));
+    } else if (runs === 6) {
+      setPlayerStats(prev => ({
+        ...prev,
+        [striker]: {
+          ...prev[striker],
+          sixes: (prev[striker]?.sixes || 0) + 1
+        }
+      }));
     }
 
-    // FIXED: Create SEPARATE entries for Wide/NoB and Runs
-    // First add the extra ball
-    const extraBallDetail = {
+    const ballDetail = {
       ball: ballsCompleted,
       over: currentOver,
       ballInOver: ballInOver,
-      runs: extraRuns,
-      strikerRuns: 0,
+      runs: totalRuns,
+      strikerRuns: runs,
       strikerName: striker,
       bowlerName: bowler,
-      type: pendingExtra,
-      extraRuns: extraRuns,
       isFreeDelivery: true,
-      displayText: pendingExtra === 'wide' ? 'WD' : 'NB'
+      extraType: extraType,
+      displayText: extraType === 'wide' ? `WD+${runs}` : `NB+${runs}`
     };
-    setBallHistory(prev => [...prev, extraBallDetail]);
 
-    // Then add the runs ball if runs > 0
-    if (runs > 0) {
-      const runsBallDetail = {
-        ball: ballsCompleted + 1,
-        over: currentOver,
-        ballInOver: ballInOver,
-        runs: runs,
-        strikerRuns: runs,
-        strikerName: striker,
-        bowlerName: bowler,
-        isFreeDelivery: false,
-        displayText: runs
-      };
-      setBallHistory(prev => [...prev, runsBallDetail]);
-      setBallsCompleted(ballsCompleted + 1);
-    }
+    setBallHistory(prev => [...prev, ballDetail]);
 
+    // FIXED: Same logic as handleRuns - no double rotation
+    // Wide/NoBall doesn't count as a ball, so no over completion check
+    // Only rotate on odd runs
     if (runs % 2 === 1) {
       const temp = striker;
       setStriker(nonStriker);
@@ -404,6 +417,7 @@ function ScoringPage() {
 
     setPendingExtra(null);
   };
+
 
 
   const handleWicketSubmit = (dismissalMode, details) => {
@@ -433,13 +447,13 @@ function ScoringPage() {
     // Don't count ball for Retired Out
     const shouldCountBall = dismissalMode !== 'retiredout';
     const newBallsCompleted = shouldCountBall ? ballsCompleted + 1 : ballsCompleted;
-    
+
     if (shouldCountBall) {
       setBallsCompleted(newBallsCompleted);
       updatePlayerStats(bowler, 'ballsBowled', 1);
       updatePlayerStats(batterToRemove, 'ballsFaced', 1);
     }
-    
+
     // Don't credit wicket to bowler for Retired Out
     const shouldCreditWicket = dismissalMode !== 'retiredout';
     if (shouldCreditWicket) {
@@ -489,13 +503,13 @@ function ScoringPage() {
   const handleNewBatsman = (newBatsman) => {
     // Check if this batsman was retired and is now returning
     const wasRetired = retiredBatsmen.includes(newBatsman);
-    
+
     if (wasRetired) {
       // Remove from retired list
       setRetiredBatsmen(prev => prev.filter(name => name !== newBatsman));
       // Stats are already stored in playerStats, no need to reset
     }
-    
+
     setStriker(newBatsman);
     setNewBatsmanNeeded(false);
     setShowBatsmanModal(false);
@@ -531,35 +545,32 @@ function ScoringPage() {
     }
 
     const lastBall = ballHistory[ballHistory.length - 1];
-
     setBallHistory(ballHistory.slice(0, -1));
 
     if (lastBall.type === 'wicket' || lastBall.type === 'retired') {
+      // Wicket undo logic - already correct
       const shouldCountBall = lastBall.dismissalMode !== 'retiredout';
       const shouldCreditWicket = lastBall.dismissalMode !== 'retiredout';
-      const shouldIncreaseWickets = lastBall.dismissalMode !== 'retiredout';
-      
+
       if (lastBall.runs && lastBall.runs > 0) {
         setScore(score - lastBall.runs);
         updatePlayerStats(lastBall.bowlerName, 'runsConceded', -lastBall.runs);
       }
 
-      // FIXED: Only decrease wickets if it was increased
       if (shouldIncreaseWickets) {
         setWickets(wickets - 1);
       }
 
-      // FIXED: Remove from retired list if undoing retired out
       if (lastBall.dismissalMode === 'retiredout') {
         setRetiredBatsmen(prev => prev.filter(name => name !== lastBall.batsmanName));
       }
-      
+
       if (shouldCountBall) {
         setBallsCompleted(ballsCompleted - 1);
         updatePlayerStats(lastBall.bowlerName, 'ballsBowled', -1);
         updatePlayerStats(lastBall.batsmanName, 'ballsFaced', -1);
       }
-      
+
       if (shouldCreditWicket) {
         updatePlayerStats(lastBall.bowlerName, 'wickets', -1);
       }
@@ -570,7 +581,9 @@ function ScoringPage() {
         setStriker(lastBall.batsmanName);
       }
       setNewBatsmanNeeded(false);
+
     } else if (lastBall.isFreeDelivery) {
+      // Wide/NoBall undo
       setScore(score - lastBall.runs);
       updatePlayerStats(lastBall.bowlerName, 'runsConceded', -lastBall.runs);
 
@@ -578,21 +591,35 @@ function ScoringPage() {
         updatePlayerStats(lastBall.strikerName, 'runs', -lastBall.strikerRuns);
         updatePlayerStats(lastBall.strikerName, 'ballsFaced', -1);
 
+        // Only rotate back if odd runs
         if (lastBall.strikerRuns % 2 === 1) {
           const temp = striker;
           setStriker(nonStriker);
           setNonStriker(temp);
         }
       }
+
     } else {
+      // Normal ball undo
       setScore(score - lastBall.runs);
-      setBallsCompleted(ballsCompleted - 1);
+      const previousBallsCompleted = ballsCompleted - 1;
+      setBallsCompleted(previousBallsCompleted);
+
       updatePlayerStats(lastBall.strikerName, 'runs', -lastBall.runs);
       updatePlayerStats(lastBall.strikerName, 'ballsFaced', -1);
       updatePlayerStats(lastBall.bowlerName, 'ballsBowled', -1);
       updatePlayerStats(lastBall.bowlerName, 'runsConceded', -lastBall.runs);
 
-      if (lastBall.runs % 2 === 1) {
+      // Check if this was the last ball of an over
+      const wasOverComplete = ballsCompleted % 6 === 0;
+
+      if (wasOverComplete) {
+        // Undo end-of-over rotation
+        const temp = striker;
+        setStriker(nonStriker);
+        setNonStriker(temp);
+      } else if (lastBall.runs % 2 === 1) {
+        // Undo odd-run rotation
         const temp = striker;
         setStriker(nonStriker);
         setNonStriker(temp);
@@ -601,6 +628,7 @@ function ScoringPage() {
 
     setPendingExtra(null);
   };
+
 
 
 
