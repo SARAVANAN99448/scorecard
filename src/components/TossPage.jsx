@@ -41,6 +41,7 @@ function TossPage() {
   const handleCallSelect = (call) => {
     if (!isFlipping) setSelectedCall(call);
   };
+
   const flipCoin = () => {
     if (!selectedTeam || !selectedCall) {
       alert('Please select both team and call (Head/Tail)');
@@ -52,66 +53,39 @@ function TossPage() {
     setTossWinner('');
     setShowBatBowlChoice(false);
     setSelectedChoice('');
+    setCoinRotation(0);
 
     const result = Math.random() < 0.5 ? 'heads' : 'tails';
-    const flipDuration = 2000;
-    const startTime = Date.now();
-    const finalRotation = result === 'heads' ? 0 : 1080;
-
-    let animationFrameId;
-
-    const animate = () => {
-      const elapsed = Date.now() - startTime;
-      const progress = Math.min(elapsed / flipDuration, 1); // Ensure progress never exceeds 1
-
-      if (progress < 1) {
-        const rotation = progress * finalRotation;
-        setCoinRotation(rotation);
-        animationFrameId = requestAnimationFrame(animate);
+    // HEADS = lands at 1080deg, TAILS = lands at 1440deg (always positive)
+    const finalRotation = result === 'heads' ? 1080 : 1440; // Should always be a >360* integer
+    let currentRotation = 0;
+    const step = 12;
+    
+    function animate() {
+      currentRotation += step;
+      if (currentRotation < finalRotation) {
+        setCoinRotation(currentRotation);
+        requestAnimationFrame(animate);
       } else {
-        // Animation complete
         setCoinRotation(finalRotation);
-        setTossResult(result);
-
-        const callMatches = (selectedCall === 'heads' && result === 'heads') || 
-                           (selectedCall === 'tails' && result === 'tails');
-
-        if (callMatches) {
-          setTossWinner(selectedTeam);
-        } else {
-          const otherTeam = selectedTeam === matchSettings.teamA ? matchSettings.teamB : matchSettings.teamA;
-          setTossWinner(otherTeam);
-        }
-
-        setShowBatBowlChoice(true);
-        setIsFlipping(false);
+        setTimeout(() => {
+          setTossResult(result);
+          const callMatches =
+            (selectedCall === 'heads' && result === 'heads') ||
+            (selectedCall === 'tails' && result === 'tails');
+          if (callMatches) {
+            setTossWinner(selectedTeam);
+          } else {
+            const otherTeam = selectedTeam === matchSettings.teamA ? matchSettings.teamB : matchSettings.teamA;
+            setTossWinner(otherTeam);
+          }
+          setShowBatBowlChoice(true);
+          setIsFlipping(false);
+        }, 200);
       }
-    };
+    }
 
-    // Start animation
-    animationFrameId = requestAnimationFrame(animate);
-
-    // Fallback: Force completion if animation doesn't finish
-    setTimeout(() => {
-      if (isFlipping) {
-        cancelAnimationFrame(animationFrameId);
-        setCoinRotation(finalRotation);
-        setTossResult(result);
-
-        const callMatches = (selectedCall === 'heads' && result === 'heads') || 
-                           (selectedCall === 'tails' && result === 'tails');
-
-        if (callMatches) {
-          setTossWinner(selectedTeam);
-        } else {
-          const otherTeam = selectedTeam === matchSettings.teamA ? matchSettings.teamB : matchSettings.teamA;
-          setTossWinner(otherTeam);
-        }
-
-        setShowBatBowlChoice(true);
-        setIsFlipping(false);
-      }
-    }, flipDuration + 500); // Extra 500ms buffer
+    requestAnimationFrame(animate);
   };
 
   const handleBatBowlChoice = (choice) => {
@@ -125,7 +99,6 @@ function TossPage() {
     }
 
     let battingFirstTeam, bowlingFirstTeam;
-
     if (selectedChoice === 'bat') {
       battingFirstTeam = tossWinner;
       bowlingFirstTeam = tossWinner === matchSettings.teamA ? matchSettings.teamB : matchSettings.teamA;
@@ -143,7 +116,6 @@ function TossPage() {
       tossWinner: tossWinner,
       tossChoice: selectedChoice
     };
-
     localStorage.setItem('matchSettings', JSON.stringify(updatedSettings));
     navigate('/scoring');
   };
@@ -161,32 +133,23 @@ function TossPage() {
   return (
     <div className="min-h-screen bg-white p-2 md:p-4 py-6 px-5 md:py-8">
       <div className="max-w-2xl mx-auto">
-        {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-3xl md:text-5xl font-black text-black mb-2">🏏 Toss</h1>
           <p className="text-gray-600 text-sm md:text-base">{matchSettings.overs} Overs Match</p>
         </div>
 
-        {/* Match Teams Info */}
         <div className="bg-white rounded-xl md:rounded-2xl p-4 md:p-6 mb-8 ">
           <div className="flex items-center justify-center gap-4">
-            {/* Team A */}
             <div className="px-4 py-3 bg-white border-2 border-green-600 rounded-xl">
               <p className="text-black font-black text-lg md:text-2xl">{matchSettings.teamA}</p>
             </div>
-            
-            {/* VS */}
             <div className="text-2xl md:text-3xl font-black text-gray-700">VS</div>
-            
-            {/* Team B */}
             <div className="px-4 py-3 bg-white border-2 border-green-600 rounded-xl">
               <p className="text-black font-black text-lg md:text-2xl">{matchSettings.teamB}</p>
             </div>
           </div>
         </div>
 
-
-        {/* 3D Coin Animation */}
         <div className="flex justify-center mb-8">
           <div className="relative w-32 h-32 md:w-40 md:h-40 perspective">
             <div
@@ -229,7 +192,6 @@ function TossPage() {
           </div>
         </div>
 
-        {/* Coin State Display */}
         {tossResult && (
           <div className="text-center mb-8">
             <div className={`inline-block px-6 py-4 rounded-xl border-2 border-green-600 font-black text-lg md:text-2xl ${
@@ -244,7 +206,6 @@ function TossPage() {
 
         {!showBatBowlChoice && (
           <>
-            {/* Team Selection */}
             <div className="mb-8">
               <label className="block text-black font-black text-sm md:text-base mb-3 uppercase">
                 Select Team to Call Toss
@@ -267,7 +228,6 @@ function TossPage() {
               </div>
             </div>
 
-            {/* Call Selection */}
             <div className="mb-8">
               <label className="block text-black font-black text-sm md:text-base mb-3 uppercase">
                 Pick Your Call
@@ -280,7 +240,7 @@ function TossPage() {
                     selectedCall === 'heads'
                       ? 'border-green-600 bg-yellow-50 text-yellow-700'
                       : 'border-gray-300 bg-white text-gray-600 hover:border-green-400'
-                  } ${isFlipping ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105 active:scale-95'}`}
+                    } ${isFlipping ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105 active:scale-95'}`}
                 >
                   <div className="text-3xl md:text-4xl mb-2">₹</div>
                   <div>HEADS</div>
@@ -292,7 +252,7 @@ function TossPage() {
                     selectedCall === 'tails'
                       ? 'border-green-600 bg-gray-50 text-gray-700'
                       : 'border-gray-300 bg-white text-gray-600 hover:border-green-400'
-                  } ${isFlipping ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105 active:scale-95'}`}
+                    } ${isFlipping ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105 active:scale-95'}`}
                 >
                   <div className="text-3xl md:text-4xl mb-2">🦁</div>
                   <div>TAILS</div>
@@ -300,7 +260,6 @@ function TossPage() {
               </div>
             </div>
 
-            {/* Flip Button */}
             <div className="mb-8">
               <button
                 onClick={flipCoin}
@@ -318,10 +277,8 @@ function TossPage() {
           </>
         )}
 
-        {/* Bat/Bowl Choice Section */}
         {showBatBowlChoice && (
           <div className="space-y-6">
-            {/* Toss Winner Info */}
             <div className="bg-white rounded-xl md:rounded-2xl p-4 md:p-6 border-2 border-green-600">
               <div className="text-center mb-4">
                 <p className="text-gray-600 text-sm md:text-base mb-2">🎉 Toss Won By</p>
@@ -331,8 +288,6 @@ function TossPage() {
                 </p>
               </div>
             </div>
-
-            {/* Bat/Bowl Choice */}
             <div>
               <label className="block text-black font-black text-sm md:text-base mb-3 uppercase">
                 {tossWinner} - Choose to Bat or Bowl
@@ -350,7 +305,6 @@ function TossPage() {
                   <div className="text-3xl md:text-4xl mb-2">🏏</div>
                   <div>BAT FIRST</div>
                 </button>
-
                 <button
                   onClick={() => handleBatBowlChoice('bowl')}
                   disabled={isFlipping}
@@ -365,8 +319,6 @@ function TossPage() {
                 </button>
               </div>
             </div>
-
-            {/* Decision Display */}
             {selectedChoice && (
               <div className="bg-white rounded-xl md:rounded-2xl p-4 md:p-6 border-2 border-green-600">
                 <div className="grid grid-cols-2 gap-4">
@@ -376,7 +328,6 @@ function TossPage() {
                       {selectedChoice === 'bat' ? tossWinner : (tossWinner === matchSettings.teamA ? matchSettings.teamB : matchSettings.teamA)}
                     </p>
                   </div>
-
                   <div className="bg-green-50 border-2 border-green-600 rounded-lg p-4 text-center">
                     <p className="text-green-700 text-xs md:text-sm font-bold mb-2">⚾ BOWLING FIRST</p>
                     <p className="text-black font-black text-lg md:text-xl">
@@ -386,8 +337,6 @@ function TossPage() {
                 </div>
               </div>
             )}
-
-            {/* Action Buttons */}
             <div className="grid grid-cols-2 gap-3 md:gap-4">
               <button
                 onClick={handleReset}
@@ -417,7 +366,6 @@ function TossPage() {
           </div>
         )}
       </div>
-
       <style>{`
         @supports (transform: rotateY(0deg)) {
           .perspective {
